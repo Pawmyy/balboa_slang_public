@@ -44,7 +44,16 @@ static const float PI = 3.14159265358979323846;
 // The two real roots are stored in t
 bool solve_quadratic(float a, float b, float c,
                      out float2 t) {
-    // From https://github.com/mmp/pbrt-v3/blob/master/src/core/pbrt.h#L419
+    // From https://github.com/mmp/pbrt-v4/blob/master/src/pbrt/util/math.h#L613
+    if (a == 0) {
+        if (b == 0) {
+            t = float2(0.0, 0.0);
+            return false;
+        }
+        t = float2(-c / b, -c / b);
+        return true;
+    }
+
     float discrim = b * b - 4 * a * c;
     if (discrim < 0) {
         t = float2(0, 0);
