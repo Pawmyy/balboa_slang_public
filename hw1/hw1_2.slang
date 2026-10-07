@@ -104,11 +104,12 @@ void compute_main(uint2 tid : SV_DispatchThreadID,
                 alpha = 1.0;
             }
 
-            // round corners
-            if(length(p - pb)  <= stroke_width / 2.0 || length(p - pa) <= stroke_width / 2.0){
+            // round caps
+            if(!((i == 0 || i == stroke_count - 1) && !is_closed)){   // exclude starting point and ending point
+              if(length(p - pb)  <= stroke_width / 2.0 || length(p - pa) <= stroke_width / 2.0){
                 image[tid] = float4(stroke_color, alpha);
+              }
             }
-
             if(distance < stroke_width / 2.0 && 
             dot_product >= 0 && 
             dot_product <= length_squared)
