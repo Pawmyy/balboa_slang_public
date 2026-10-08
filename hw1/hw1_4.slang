@@ -1,4 +1,5 @@
 import hw1_common;
+import hw1_interface;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
@@ -18,166 +19,21 @@ void compute_main(uint2 tid : SV_DispatchThreadID,
         return;
     }
 
-    image[tid] = float4(1.0);
+    image[tid] = float4(background, 1.0);
     // TODO: your code here
     for(int i = num_shapes - 1; i >= 0; i--){
       float2 pixels = float2(tid.x, height - 1 - tid.y);
       int idx = shapes[i].index;
       Shape current_shape = shapes[i];
+      float2 obj_pixel = transform(pixels, current_shape.world_to_obj);
       switch (shapes[i].type){
         case(ShapeType.Circle):
-          pixels = transform(pixels, current_shape.world_to_obj);
-          drawCircle(tid, pixels, circles[idx].center, circles[idx].radius, current_shape.use_fill,
-              current_shape.fill_rgba, current_shape.use_stroke, current_shape.stroke_rgba, 
-              current_shape.stroke_width, image);
+          drawCircle(tid, circles[idx], current_shape, obj_pixel, image);
           break;
         case(ShapeType.Polyline):
-          pixels = transform(pixels, current_shape.world_to_obj);
-          drawPolyline(tid, pixels, polylines[idx].pts_begin, polylines[idx].pts_end, points, polylines[idx].closed,
-              current_shape.use_fill, current_shape.fill_rgba, current_shape.use_stroke,
-              current_shape.stroke_rgba, current_shape.stroke_width, image);
+          drawPolyline(tid, polylines[idx], current_shape, obj_pixel, points, image);
           break;
       }
     }
 }
 
-void drawCircle(uint2 tid : SV_DispatchThreadID,
-    float2 pixels,
-    float2 center,
-    float radius,
-    uniform bool use_fill_color,
-    uniform float4 fill_color,
-    uniform bool use_stroke_color,
-    uniform float4 stroke_color,
-    uniform float stroke_width,
-    RWTexture2D<float4> image){
-  if(use_fill_color){
-    if(length(pixels - center) <= radius){    // fill color
-      image[tid] = float4(fill_color);
-    }
-  }
-
-  if(use_stroke_color){
-    if((length(pixels - center) > radius - stroke_width / 2) && (length(pixels - center) < radius + stroke_width / 2)){ // stroke
-      image[tid] = float4(stroke_color);
-    }
-
-  }
-}
-
-void drawPolyline(uint2 tid : SV_DispatchThreadID,
-    float2 pixels,
-    int pts_begin,
-    int pts_end,
-    StructuredBuffer<float2> points,
-    uniform bool is_closed,
-    uniform bool use_fill_color,
-    uniform float4 fill_color,
-    uniform bool use_stroke_color,
-    uniform float4 stroke_color,
-    uniform float stroke_width,
-    RWTexture2D<float4> image){
-  int num_polyline = 0;
-  float2 pa, pb;
-  num_polyline = pts_end - pts_begin;
-
-  if(is_closed && use_fill_color){
-    int around = 0;
-
-    for(int i = 0; i < num_polyline; i++){
-
-      int j = (i + 1) % num_polyline;
-
-      float2 pi = points[pts_begin + i]; // polyline coord[i]
-      float2 pj = points[pts_begin + j]; // polyline coord[j]
-
-      bool between = ((pi.y > pixels.y) != (pj.y > pixels.y));
-
-      float2 v = pj - pi;
-      float2 u = pixels - pi;
-
-      // cross upward
-      if (pi.y >= pixels.y && pj.y < pixels.y){
-        float edge_cross = (v.x * u.y) - (u.x * v.y);   // 2D scalar cross product between vectors
-        if(edge_cross > 0){
-          around++;
-        }
-      } 
-      // cross downward
-      else if(pi.y < pixels.y && pj.y >= pixels.y){
-        float edge_cross = (v.x * u.y) - (u.x * v.y);   // 2D scalar cross product between vectors
-        if(edge_cross < 0){
-          around--;
-        }
-      }
-
-    }
-
-    if(around != 0){
-      image[tid] = float4(fill_color);
-    }
-  }
-
-  if(use_stroke_color){
-    int stroke_count = is_closed ? num_polyline: num_polyline - 1;
-
-    for(int i = 0; i < stroke_count; i++){
-      int next = (i + 1) % num_polyline;
-
-      pa = points[pts_begin + i]; // point a
-      pb = points[pts_begin + next]; // point b 
-
-      float2 p_diff = pb - pa;    // vector differences between 2 points
-
-      float2 offset_pixel = pixels - pa;     // offset for starting point to be at pa not origin
-
-      float cross_product = offset_pixel.x * p_diff.y - offset_pixel.y * p_diff.x;    
-      /*
-         gives the length of the offset_pixel to the line.
-         aka size of the cross product(3D)
-         aka the area of the parallelogram of two input vectors
-         note that the cross product(3D) is perpendicular to vector p_diff
-         */
-
-      float dot_product = dot(offset_pixel, p_diff);    
-      /*
-         gives how long offset_pixel is in term/direction of p_diff
-         so we can compare that the pixel is beyond offset_pixel 
-         */
-      float length_squared = dot(p_diff, p_diff); 
-      /*
-         gives the length of the line segment
-         we can use this to compare that the pixel is not beyond the point pb
-         */
-
-      float distance = abs(cross_product) / sqrt(length_squared); // distance from pixel to the line
-
-      // check stroke_color
-      float alpha = 0.0;
-      if(use_stroke_color){
-        alpha = 1.0;
-      }
-
-      // round caps
-      if(!((i == 0 || i == stroke_count - 1) && !is_closed)){   // exclude starting point and ending point
-        if(length(pixels - pb)  <= stroke_width / 2.0 || length(pixels - pa) <= stroke_width / 2.0){
-          image[tid] = float4(stroke_color);
-        }
-      }
-      if(distance < stroke_width / 2.0 && 
-          dot_product >= 0 && 
-          dot_product <= length_squared)
-      {
-        image[tid] = float4(stroke_color);
-      }
-
-    }
-
-  }
-}
-
-float2 transform(float2 pixel,
-               float3x3 transformation_matrix){
-  float3 q = mul(transformation_matrix, float3(pixel, 1.0));
-  return q.xy;
-}
