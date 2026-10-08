@@ -251,6 +251,35 @@ def compose_transformation(transforms):
 
 def interpolate_transformation(transform_keyframes, t):
     # TODO: your code here
+    first_keyframe = transform_keyframes[0]
+    last_keyframe = transform_keyframes[-1]
+
+    if t <= first_keyframe["time"]:
+        return first_keyframe["transform"]
+    elif t >= last_keyframe["time"]:
+        return last_keyframe["transform"]
+
+    for i in range(len(transform_keyframes) - 1):
+        key_1 = transform_keyframes[i]
+        key_2 = transform_keyframes[i + 1]
+
+        t_1, t_2 = key_1["time"], key_2["time"]
+
+        if t_1 <= t <= t_2:
+            w = (t - t_1) / (t_2 - t_1)
+
+            result = []
+            for ekey_1, ekey_2 in zip(key_1["transform"], key_2["transform"]):
+                ((kind_a, value_key1),) = ekey_1.items()
+                ((value_key2),) = ekey_2.values()
+
+                value_key1 = np.array(value_key1, np.float32)
+                value_key2 = np.array(value_key2, np.float32)
+                value = (1 - w) * value_key1 + w * value_key2
+
+                result.append({kind_a: value.tolist()})
+
+            return result
 
     # Should never happen?
     assert False
