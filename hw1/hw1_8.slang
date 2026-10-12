@@ -20,4 +20,216 @@ void compute_main(uint2 tid : SV_DispatchThreadID,
 
     image[tid] = float4(1.0);
     // TODO: your code here
+    float4 accum = float4(0.0);
+    for(int u = 0; u < samples_per_axis; u++){
+      for(int v = 0; v < samples_per_axis; v++){
+        float2 p = float2(tid.x + (u + 0.5) / samples_per_axis, height - 1 - tid.y + (v + 0.5) / samples_per_axis);
+
+        float4 color = float4(background, 1.0);
+        for(int i = num_shapes - 1; i >= 0; i--){
+          // float2 pixels = float2(tid.x, height - 1 - tid.y);
+          float2 pixels = p;
+          int idx = shapes[i].index;
+          Shape current_shape = shapes[i];
+          float2 obj_pixel = transform(pixels , current_shape.world_to_obj);
+          bool inside = false;
+          bool onStroke = false;
+
+          // Shape Types
+          switch (shapes[i].type){
+            case(ShapeType.Circle):
+
+              inside = length(obj_pixel - circles[idx].center) <= circles[idx].radius;
+              onStroke = (abs(length(obj_pixel - circles[idx].center) - circles[idx].radius)) < current_shape.stroke_width / 2;
+
+              break;
+            case(ShapeType.Polyline):
+              float2 pa; 
+              float2 pb;
+              int num_polyline = polylines[idx].pts_end - polylines[idx].pts_begin;
+
+              float2 p = obj_pixel;
+
+              // fill color
+              if(polylines[idx].closed && current_shape.use_fill){
+                int around = 0;
+
+                for(int i = 0; i < num_polyline; i++){
+
+                  int j = (i + 1) % num_polyline;
+
+                  float2 pi = points[polylines[idx].pts_begin + i]; // polyline coord[i]
+                  float2 pj = points[polylines[idx].pts_begin + j]; // polyline coord[j]
+
+                  bool between = ((pi.y > p.y) != (pj.y > p.y));
+
+                  float2 v = pj - pi;
+                  float2 u = p - pi;
+
+                  // cross upward
+                  if (pi.y >= p.y && pj.y < p.y){
+                    // edge_croos is the area of parallelogram
+                    // help determine if the pixel is on the left or right of the polyline
+                    float edge_cross = (v.x * u.y) - (u.x * v.y);   // 2D scalar cross product between vectors
+                    if(edge_cross > 0){
+                      around++;
+                    }
+                  } 
+                  // cross downward
+                  else if(pi.y < p.y && pj.y >= p.y){
+                    float edge_cross = (v.x * u.y) - (u.x * v.y);   // 2D scalar cross product between vectors
+                    if(edge_cross < 0){
+                      around--;
+                    }
+                  }
+
+                }
+
+                inside = (around != 0);
+              }
+
+              if(current_shape.use_stroke){
+                int stroke_count = polylines[idx].closed ? num_polyline: num_polyline - 1;
+
+                for(int i = 0; i < stroke_count; i++){
+                  int next = (i + 1) % num_polyline;
+
+                  pa = points[polylines[idx].pts_begin + i]; // point a
+                  pb = points[polylines[idx].pts_begin + next]; // point b 
+
+                  float2 p_diff = pb - pa;    // vector differences between 2 points
+
+                  float2 offset_pixel = p - pa;     // offset for starting point to be at pa not origin
+
+                  float cross_product = offset_pixel.x * p_diff.y - offset_pixel.y * p_diff.x;    
+                  /*
+                     gives the length of the offset_pixel to the line.
+                     aka size of the cross product(3D)
+                     aka the area of the parallelogram of two input vectors
+                     note that the cross product(3D) is perpendicular to vector p_diff
+                     */
+
+                  float dot_product = dot(offset_pixel, p_diff);    
+                  /*
+                     gives how long offset_pixel is in term/direction of p_diff
+                     so we can compare that the pixel is beyond offset_pixel 
+                     */
+                  float length_squared = dot(p_diff, p_diff); 
+                  /*
+                     gives the length of the line segment
+                     we can use this to compare that the pixel is not beyond the point pb
+                     */
+
+                  float distance = abs(cross_product) / sqrt(length_squared); // distance from pixel to the line
+
+                  // round caps
+                  if(!((i == 0 || i == stroke_count - 1) && !polylines[idx].closed)){   // exclude starting point and ending point
+                    if(length(p - pb)  <= current_shape.stroke_width / 2.0 || length(p - pa) <= current_shape.stroke_width / 2.0){
+                      onStroke = true;
+                    }
+                  }
+                  if (distance < current_shape.stroke_width / 2.0 && 
+                      dot_product >= 0 && 
+                      dot_product <= length_squared){
+                    onStroke = true;
+                  }
+                }
+
+              }
+              break;
+            case(current_shape.type.QuadraticBezier):
+              // fill color
+              int num_pts = quadratic_beziers[idx].pts_end - quadratic_beziers[idx].pts_begin;
+              int num_curves = num_pts / 2; 
+              int winding = 0;
+
+              for(int i = 0; i < num_curves; i++){
+                float2 pi = points[quadratic_beziers[idx].pts_begin + 2 * i]; // quadratic_beziers coord[i]
+                float2 pj = points[quadratic_beziers[idx].pts_begin + 2 * i + 1]; // quadratic_beziers coord[j]
+                float2 pk = points[quadratic_beziers[idx].pts_begin + (2 * i + 2) % num_pts]; // quadratic_beziers coord[k]
+
+                // coeeficients for quadratic solver
+                float a = pi.y - 2 * pj.y + pk.y;
+                float b = -2 * pi.y + 2 * pj.y;
+                float c = pi.y - obj_pixel.y;
+
+                float2 quadratic_roots;
+
+                bool quadratic_roots_exist = solve_quadratic(a, b, c, quadratic_roots);
+
+                if (quadratic_roots_exist){
+                  for(int r = 0; r < 2; r++){
+                    float t = quadratic_roots[r];
+                    if (t < 0 || t > 1){ continue; }
+                    // Fill
+                    float x_of_t = (1 - t) * (1 - t) * pi.x + 2 * (1 - t) * t * pj.x + t * t * pk.x;
+                    if(x_of_t <= obj_pixel.x){ continue; }
+                    float diff_y = -2 * (1 - t) * pi.y + 2 * pj.y * (1 - 2 * t) + 2 * t * pk.y;
+                    if(diff_y > 0){
+                      winding++;
+                    }else if(diff_y < 0){
+                      winding--;
+                    }
+                  }
+                }
+
+                // Stroke 
+                if(current_shape.use_stroke){
+                  float2 term1_q = pi - 2 * pj + pk;
+                  float2 term2_q = -2 * pi + 2 * pj;
+                  float2 term3_q = pi - obj_pixel;
+                  float2 q_of_t = term1_q + term2_q + term3_q;
+                  float3 cubic_roots;
+
+                  float minDist = 1e30;
+                  int num_cubic_roots = solve_cubic(2 * dot(term1_q, term1_q), \
+                      dot(term1_q, term2_q) + dot(term2_q, 2 * term1_q), \
+                      dot(term2_q, term2_q) + dot(term3_q, 2 * term1_q), \
+                      dot(term3_q, term2_q), cubic_roots);
+
+                  for(int r = 0; r < num_cubic_roots; r++){
+                    float s = cubic_roots[r];
+                    if(s >= 0 && s <= 1){
+                      float2 q = (term1_q * s + term2_q) * s + pi;
+                      minDist = min(length(obj_pixel - q), minDist);
+                    }
+                  }
+                  if(!((i == 0 || i == num_curves - 1) && !quadratic_beziers[idx].closed)){   // exclude starting point and ending point
+                    if(minDist <= current_shape.stroke_width / 2.0){
+                      onStroke = true;
+                    }
+                  }
+                  if (minDist < current_shape.stroke_width / 2.0){
+                    onStroke = true;
+                  }
+                } // end num_curves loop
+              }
+              inside = (winding != 0);
+
+              break;
+          } // end switch
+
+          if(inside && current_shape.use_fill){
+            color = alpha_blend(current_shape.fill_rgba, color);
+          }
+          if(onStroke && current_shape.use_stroke){
+            color = alpha_blend(current_shape.stroke_rgba, color);
+          }
+
+        } // end i
+        accum += color;
+      } // end v
+    } // end u
+    image[tid] = accum / (samples_per_axis * samples_per_axis);
 }
+
+float2 transform(float2 pixel, float3x3 transformation_matrix){
+  float3 result = mul(transformation_matrix, float3(pixel, 1.0));
+  return result.xy;
+}
+
+float4 alpha_blend(float4 src, float4 dst){
+  float a = src.a;
+  return float4(a * src.rgb + dst.rgb * (1.0 - a), a + dst.a * (1.0 - a));
+}
+
