@@ -1,28 +1,30 @@
 # balboa
-
 UCSD CSE 167 codebase
-as part of the course CSE 167
-<https://cseweb.ucsd.edu/~tzli/cse167/>
+https://cseweb.ucsd.edu/~tzli/cse167/
 
-# forked
+This is a revised version of balboa that builds on [SlangPy](https://github.com/shader-slang/slangpy). Currently only Homework 1 and 2 are completed. Future homeworks will be added soon.
 
-This repo is a forked of <https://github.com/BachiLi/balboa_slang_public>
+# Setup
+Clone the repository:
+```bash
+git clone https://github.com/BachiLi/balboa_slang_public.git
+cd balboa_slang_public
+```
 
-# Location of the scenes
+We use [uv](https://docs.astral.sh/uv/) to manage Python packages and environments. Go to the linked website to install it if you haven't. Once installed, run
+```bash
+uv sync
+```
 
-[pokemon](scenes/hw1/pokemon.json)
-which is a merge of [morpeko](scenes/hw1/morpeko.json) and [pawmi](scenes/hw1/pawmi.json)
+Then try
+```bash
+uv run python main.py 1_1
+```
 
-# Output of the scenes
+You should see a window with white background.
 
-the output is [here](outputs/pokemon.png)
+# Platforms
 
-# Making of the scenes
+Balboa depends on [SlangPy](https://github.com/shader-slang/slangpy) as a GPU programming framework, and should work on Windows, Linux, and Apple Silicon Macs. 
 
-I used my old project which convert images or svg files into shapes, specifically bezier curves and basic shapes like circles and lines. In that project, I tried to make curvature. Convert them into polynomials and put it on desmos. Unfortunately, my knowledge at the time(~4 years ago) didn't allow me:(
-
-with some adjustment and help of AI, I managed to use the old project and format it into json file
-
-# Integrity (more like a rants than actual explanation or justification)
-
-I do NOT think it is of unfair use to use AI to help me fix the old code and make it into the shader preffered format. The existing project already give cubic and quadratic bezier curves plus lines. If whoever grading this assignment thinks it is against academic integrity, I am totally okay with not getting bonus points since I genuinely make the scenes just for the fun of it. Also reading my old code is a nightmare
+**Intel Macs:** SlangPy does not currently publish macOS x86_64 wheels, so setup may require building SlangPy from source. If you are using an Intel Mac and `uv sync` fails because no compatible SlangPy package is available, you may need to build SlangPy from source. Contact the staff/instructor if you run into issues.
