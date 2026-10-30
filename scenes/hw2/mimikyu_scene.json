@@ -1,0 +1,71 @@
+{
+    "camera": {
+        "resolution": [
+            640,
+            480
+        ],
+        "transform": [
+            {
+                "lookat": {
+                    "position": [
+                        0,
+                        0.15,
+                        0
+                    ],
+                    "target": [
+                        0,
+                        0.15,
+                        -3.2
+                    ],
+                    "up": [
+                        0,
+                        1,
+                        0
+                    ]
+                }
+            }
+        ],
+        "s": 1
+    },
+    "background": [
+        0.5,
+        0.5,
+        0.5
+    ],
+    "duration": 4.0,
+    "objects": [
+        {
+            "filename": "mimikyu_mesh.json",
+            "transform": [
+                {
+                    "rotate_y": [
+                        180
+                    ]
+                },
+                {
+                    "scale": [
+                        0.15,
+                        0.15,
+                        0.15
+                    ]
+                },
+                {
+                    "translate": [
+                        0,
+                        -0.8,
+                        -3.2
+                    ]
+                }
+            ],
+            "material": {
+                "texture": "mimikyu.png",
+                "Ks": [
+                    0.11,
+                    0.11,
+                    0.11
+                ],
+                "exponent": 30.0
+            }
+        }
+    ]
+}
